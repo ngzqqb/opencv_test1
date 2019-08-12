@@ -14,6 +14,8 @@ namespace sstd {
     /*对图片进行直方图均衡化：*/
     cv::Mat histogramImage(const cv::Mat &);
 
+    cv::Mat cannyImage(const cv::Mat & arg);
+
     /*保存图片:只测试jpg格式，只用于测试*/
     bool saveImage(const cv::Mat &,const QString &);
 
