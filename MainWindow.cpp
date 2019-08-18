@@ -24,6 +24,9 @@ void MainWindow::on_imageFileNameButton_clicked() {
 
 void MainWindow::on_callButton_clicked() {
     auto varFileName = ui->imageFileName->text();
-    qDebug() << sstd::evalAngle(varFileName);
+    auto varAngle = sstd::evalAngle(varFileName);
+    sstd::saveImage(
+    sstd::rotateExternImage(varFileName, varAngle), 
+        varFileName+QStringLiteral(".1.bmp"));
 }
 

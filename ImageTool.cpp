@@ -62,13 +62,6 @@ namespace sstd {
             return std::move(varAns);
         }
 
-        inline bool saveImage(const cv::Mat & arg, const QString & argFileName) {
-            const auto varImageName = argFileName.toLocal8Bit();
-            const cv::String varCVFileName{ varImageName.data(),
-                        static_cast<std::size_t>(varImageName.size()) };
-            return cv::imwrite(varCVFileName, arg);
-        }
-
         inline QImage toQImage(const cv::Mat & arg) {
             if (arg.empty()) {
                 return{};
@@ -188,8 +181,8 @@ namespace sstd {
             constexpr int varArrayCount = int((180. / varAngleStep));
             std::array< CountItem, varArrayCount > varAngleCount;
             for (const auto & varI : varLines) {/* 每一个角度加入 angle +/- varAngleStep 三个柱状图 */
-                
-                const int varIndex = std::min(varArrayCount-1, 
+
+                const int varIndex = std::min(varArrayCount - 1,
                     std::max(0, int(varI->thisAngle / varAngleStep)));
 
                 int varNextIndex = varIndex + 1;
@@ -225,6 +218,78 @@ namespace sstd {
 
     } catch (...) {
         return 0;
+    }
+
+    cv::Mat rotateExternImage(
+        const QString & argImageInput,
+        double argAngle,
+        int argMargin) try {
+        auto const varImageName = argImageInput.toLocal8Bit();
+        return rotateExternImage(
+            cv::imread({ varImageName.data(), static_cast<std::size_t>(varImageName.size()) }),
+            argAngle,
+            argMargin);
+    } catch (const std::exception & e) {
+        std::cout << e.what() << std::endl;
+        return {};
+    } catch (...) {
+        std::cout << "unknow exception ." << std::endl;
+        return {};
+    }
+
+    cv::Mat rotateExternImage(
+        const cv::Mat & argImageInput,
+        double argAngle,
+        int argMargin) try {
+        cv::Mat argImage;
+        cv::copyMakeBorder(argImageInput, argImage,
+            argMargin, argMargin, argMargin, argMargin,
+            cv::BORDER_CONSTANT,
+            cv::Scalar(255, 255, 255));
+        if constexpr (false) {
+            cv::copyMakeBorder(argImage, argImage,
+                1, 1, 1, 1,
+                cv::BORDER_CONSTANT,
+                cv::Scalar(2, 2, 2));
+        }
+        if (argImageInput.empty()) {
+            return std::move(argImage);
+        }
+        cv::Point2f varCenter(
+            (argImage.cols - 1) / 2.0,
+            (argImage.rows - 1) / 2.0);
+        cv::Mat varRotateMatrix =
+            cv::getRotationMatrix2D(varCenter, argAngle, 1.0);
+        cv::Rect2f varBoundBox = cv::RotatedRect(cv::Point2f(),
+            argImage.size(),
+            argAngle).boundingRect2f();
+        varRotateMatrix.at<double>(0, 2) +=
+            varBoundBox.width / 2.0 - argImage.cols / 2.0;
+        varRotateMatrix.at<double>(1, 2) +=
+            varBoundBox.height / 2.0 - argImage.rows / 2.0;
+        cv::Mat varRotatedImage;
+        cv::warpAffine(argImage,
+            varRotatedImage/*dst*/,
+            varRotateMatrix,
+            varBoundBox.size(),
+            cv::INTER_CUBIC,
+            cv::BORDER_CONSTANT,
+            cv::Scalar(255, 255, 255));
+        return std::move(varRotatedImage);
+        /* https://stackoverflow.com/questions/22041699/rotate-an-image-without-cropping-in-opencv-in-c */
+    } catch (const std::exception & e) {
+        std::cout << e.what() << std::endl;
+        return {};
+    } catch (...) {
+        std::cout << "unknow exception ." << std::endl;
+        return {};
+    }
+
+    bool saveImage(const cv::Mat & arg, const QString & argFileName) {
+        const auto varImageName = argFileName.toLocal8Bit();
+        const cv::String varCVFileName{ varImageName.data(),
+                    static_cast<std::size_t>(varImageName.size()) };
+        return cv::imwrite(varCVFileName, arg);
     }
 
 }/*namespace sstd*/
