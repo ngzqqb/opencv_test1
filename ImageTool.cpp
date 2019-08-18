@@ -1,5 +1,6 @@
 ﻿#include <cassert>
 #include <string>
+#include <numeric>
 #include "ImageTool.hpp"
 
 namespace sstd {
@@ -9,8 +10,7 @@ namespace sstd {
         class LineItem : public QLineF {
         public:
             double thisLineLength/*线段长度*/;
-            double thisDx;
-            double thisDy;
+            double thisAngle;
 
             inline LineItem(const QLineF & arg) :
                 QLineF{ arg },
@@ -18,16 +18,17 @@ namespace sstd {
             }
 
             inline void fullConstruct() {
-                auto varRate = 1.0 / thisLineLength;
-                thisDx = varRate * this->dx();
-                thisDy = varRate * this->dy();
+                thisAngle = std::atan2(this->dy(), this->dx());
+                if (thisAngle < 0) {
+                    thisAngle += 3.1415927;
+                }
+                thisAngle = (180 / 3.141592654) * thisAngle;
             }
 
             inline LineItem() :
                 QLineF{ {1,0},{0,0} },
                 thisLineLength{ 0 },
-                thisDx{ 0 },
-                thisDy{ 0 }{
+                thisAngle{ 0 }{
             }
 
             inline LineItem(const LineItem &) = delete;
@@ -91,7 +92,7 @@ namespace sstd {
         }
 
         inline std::vector< std::shared_ptr<LineItem> > houghLinesP(const cv::Mat & arg) {
-            auto varLess = [](const auto & l, const auto & r) {
+            auto varLessLength = [](const auto & l, const auto & r) {
                 return l->thisLineLength > r->thisLineLength;
             };
             std::vector< std::shared_ptr<LineItem> > varAns;
@@ -111,12 +112,16 @@ namespace sstd {
                         QPoint{ varI[2],varI[3] } }));
                 }
             }
-            if (varAns.size() > 128) {/* 最多保留前128项 */
-                std::nth_element(varAns.begin(), varAns.begin() + 128, varAns.end(), varLess);
-                varAns.resize(128);
+            constexpr std::size_t varMaxEleSize = 128;
+            if (varAns.size() > varMaxEleSize) {/* 最多保留前 varMaxEleSize 项 */
+                std::nth_element(varAns.begin(),
+                    varAns.begin() + varMaxEleSize,
+                    varAns.end(),
+                    varLessLength);
+                varAns.resize(varMaxEleSize);
             }
             /* 从大到小排序 */
-            std::sort(varAns.begin(), varAns.end(), varLess);
+            std::sort(varAns.begin(), varAns.end(), varLessLength);
             /* 完整构造 */
             for (auto & varI : varAns) {
                 varI->fullConstruct();
@@ -124,25 +129,10 @@ namespace sstd {
             return std::move(varAns);
         }
 
-        inline std::array<double, 2> PCAMain(const std::vector< std::shared_ptr<LineItem> > & arg) {
-             
-            cv::Mat varMean;
-            cv::Mat varEigenVectors;
-            std::vector< cv::Point2d > varPoints;
-            varPoints.reserve(arg.size());
-
-            for (const auto & varI:arg) {
-                varPoints.emplace_back(varI->thisDx,varI->thisDy);
-            }
-
-            cv::PCACompute(varPoints, varMean, varEigenVectors);
-
-            return{ varEigenVectors.at<double>(0,0),varEigenVectors.at<double>(0,1) };
-        }
 
     }/**/
 
-    double evalAngle(const QString & arg) {
+    double evalAngle(const QString & arg) try {
         namespace ps = private_eval_angle;
         std::vector< std::shared_ptr<ps::LineItem> > varLines;
         {/**/
@@ -157,6 +147,17 @@ namespace sstd {
                 varCannyImage = ps::cannyImage(varHistogramImage);
             }
             varLines = ps::houghLinesP(varCannyImage);
+            if constexpr (true) {/* 测试绘制霍夫曼直线 */
+                QImage varImage{ arg };
+                {
+                    QPainter varPainter{ &varImage };
+                    for (const auto & varI : varLines) {
+                        varPainter.setPen(QPen{ QColor(230,std::rand() & 255,std::rand() & 127),2 });
+                        varPainter.drawLine(*varI);
+                    }
+                }
+                varImage.save(arg + QStringLiteral(".bmp"));
+            }
         }
 
         if (varLines.empty()) {/*没有找到符合要求的直线 .... */
@@ -164,13 +165,48 @@ namespace sstd {
         }
 
         if (varLines.size() == 1) {/*只找到一条符合要求的直线 ... */
-            return std::fmod(varLines[0]->angle(), 45.);
+            return varLines[0]->thisAngle;
         }
 
-        /*获得主方向*/
-        auto varMainAxis = ps::PCAMain(varLines);
-        return std::fmod( std::atan2(varMainAxis[1],varMainAxis[0])/3.141592654*180,45.);
+        { /* 统计角度高峰 ...  */
+            class CountItem {
+            public:
+                std::list< std::shared_ptr<ps::LineItem > > items;
+                double mean{ 0 };
+                void evalMean() {
+                    mean = 0;
+                    if (items.empty()) {
+                        return;
+                    }
+                    const auto varRate = 1.0 / items.size();
+                    for (const auto & varI : items) {
+                        mean = std::fma(varRate, varI->thisAngle, mean);
+                    }
+                }
+            };
+            constexpr int varAngleStep = 10;
+            std::array< CountItem, 8 + 180 / varAngleStep> varAngleCount;
+            for (const auto & varI : varLines) {
+                varAngleCount[std::max(0, int(varI->thisAngle / varAngleStep))]
+                    .items.push_back(varI);
+            }
+            for (auto & varI : varAngleCount) {
+                varI.evalMean();
+            }
+            return std::max_element(varAngleCount.begin(), varAngleCount.end(),
+                [](const auto & l, const auto & r) {/* size 大的 mean 小的 */
+                if (l.items.size() < r.items.size()) {
+                    return true;
+                }
+                if (l.items.size() > r.items.size()) {
+                    return false;
+                }
+                return l.mean > r.mean;
+            })->mean;
+        }
 
+    } catch (...) {
+        return 0;
     }
 
 }/*namespace sstd*/
