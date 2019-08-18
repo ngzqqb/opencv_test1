@@ -184,11 +184,29 @@ namespace sstd {
                     }
                 }
             };
-            constexpr int varAngleStep = 10;
-            std::array< CountItem, 8 + 180 / varAngleStep> varAngleCount;
-            for (const auto & varI : varLines) {
-                varAngleCount[std::max(0, int(varI->thisAngle / varAngleStep))]
-                    .items.push_back(varI);
+            constexpr int varAngleStep = 3;
+            constexpr int varArrayCount = int(0.5 + (180. / varAngleStep));
+            std::array< CountItem, varArrayCount > varAngleCount;
+            for (const auto & varI : varLines) {/* 每一个角度加入 angle +/- varAngleStep 三个柱状图 */
+                
+                const int varIndex = std::min(varArrayCount-1, 
+                    std::max(0, int(varI->thisAngle / varAngleStep)));
+
+                int varNextIndex = varIndex + 1;
+                int varBeforeIndex = varIndex - 1;
+
+                if (varBeforeIndex < 0) {
+                    varBeforeIndex = varArrayCount - 1;
+                }
+
+                if (varNextIndex >= varArrayCount) {
+                    varNextIndex = 0;
+                }
+
+                varAngleCount[varIndex].items.push_back(varI);
+                varAngleCount[varNextIndex].items.push_back(varI);
+                varAngleCount[varBeforeIndex].items.push_back(varI);
+
             }
             for (auto & varI : varAngleCount) {
                 varI.evalMean();
