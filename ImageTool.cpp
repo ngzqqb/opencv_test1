@@ -185,7 +185,7 @@ namespace sstd {
                 }
             };
             constexpr int varAngleStep = 3;
-            constexpr int varArrayCount = int(0.5 + (180. / varAngleStep));
+            constexpr int varArrayCount = int((180. / varAngleStep));
             std::array< CountItem, varArrayCount > varAngleCount;
             for (const auto & varI : varLines) {/* 每一个角度加入 angle +/- varAngleStep 三个柱状图 */
                 
