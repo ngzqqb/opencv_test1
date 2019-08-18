@@ -15,16 +15,19 @@ namespace sstd {
             inline LineItem(const QLineF & arg) :
                 QLineF{ arg },
                 thisLineLength{ arg.length() }{
+            }
+
+            inline void fullConstruct() {
                 auto varRate = 1.0 / thisLineLength;
-                thisDx = varRate * arg.dx();
-                thisDy = varRate * arg.dy();
+                thisDx = varRate * this->dx();
+                thisDy = varRate * this->dy();
             }
 
             inline LineItem() :
                 QLineF{ {1,0},{0,0} },
-                thisLineLength{ 0 }, 
-                thisDx{0},
-                thisDy{0}{
+                thisLineLength{ 0 },
+                thisDx{ 0 },
+                thisDy{ 0 }{
             }
 
             inline LineItem(const LineItem &) = delete;
@@ -88,22 +91,42 @@ namespace sstd {
         }
 
         std::vector< std::shared_ptr<LineItem> > houghLinesP(const cv::Mat & arg) {
-            std::vector<cv::Vec4i> varLines;
-            cv::HoughLinesP(arg,
-                varLines,
-                1.05/*半径分辨率*/,
-                CV_PI / 180/*角度分辨率*/,
-                30/*直线点数阈值*/,
-                120/*直线长度阈值*/,
-                16/*最大距离*/);
+            auto varLess = [](const auto & l, const auto & r) {
+                return l->thisLineLength > r->thisLineLength;
+            };
             std::vector< std::shared_ptr<LineItem> > varAns;
-            varAns.reserve(varLines.size());
-            for (const auto & varI : varLines) {
-                varAns.push_back(std::make_shared<LineItem>(QLineF{
-                    QPoint{ varI[0],varI[1] },
-                    QPoint{ varI[2],varI[3] } }));
+            {/*霍夫曼找直线...*/
+                std::vector<cv::Vec4i> varLines;
+                cv::HoughLinesP(arg,
+                    varLines,
+                    1.05/*半径分辨率*/,
+                    CV_PI / 180/*角度分辨率*/,
+                    30/*直线点数阈值*/,
+                    120/*直线长度阈值*/,
+                    16/*最大距离*/);
+                varAns.reserve(varLines.size());
+                for (const auto & varI : varLines) {
+                    varAns.push_back(std::make_shared<LineItem>(QLineF{
+                        QPoint{ varI[0],varI[1] },
+                        QPoint{ varI[2],varI[3] } }));
+                }
+            }
+            if (varAns.size() > 128) {/* 最多保留前128项 */
+                std::nth_element(varAns.begin(), varAns.begin() + 128, varAns.end(), varLess);
+                varAns.resize(128);
+            }
+            /* 从大到小排序 */
+            std::sort(varAns.begin(), varAns.end(), varLess);
+            /* 完整构造 */
+            for (auto & varI : varAns) {
+                varI->fullConstruct();
             }
             return std::move(varAns);
+        }
+
+        std::array<double, 2> PCAMain(const std::vector< std::shared_ptr<LineItem> > & arg) {
+            cv::PCA varPCA;
+            return {};
         }
 
     }/**/
@@ -125,7 +148,15 @@ namespace sstd {
             varLines = ps::houghLinesP(varCannyImage);
         }
 
-         
+        if (varLines.empty()) {/*没有找到符合要求的直线 .... */
+            return 0;
+        }
+
+        if (varLines.size() == 1) {/*只找到一条符合要求的直线 ... */
+            return std::fmod(varLines[0]->angle(), 45.);
+        }
+
+
 
         return 0;
     }
