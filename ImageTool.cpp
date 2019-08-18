@@ -36,7 +36,7 @@ namespace sstd {
             inline LineItem&operator=(LineItem &&) = delete;
         };
 
-        cv::Mat loadImage(const QString & arg) {
+        inline cv::Mat loadImage(const QString & arg) {
             auto const varImageName = arg.toLocal8Bit();
             return cv::imread({ varImageName.data(),
                                 static_cast<std::size_t>(varImageName.size()) },
@@ -44,7 +44,7 @@ namespace sstd {
         }
 
         /* https://blog.csdn.net/wsp_1138886114/article/details/83793331 */
-        cv::Mat histogramImage(const cv::Mat & arg) {
+        inline cv::Mat histogramImage(const cv::Mat & arg) {
             cv::Mat varAns;
             if constexpr (false) {
                 auto varCLAHE = cv::createCLAHE(40.0, { 8,8 });
@@ -55,20 +55,20 @@ namespace sstd {
             return std::move(varAns);
         }
 
-        cv::Mat cannyImage(const cv::Mat & arg) {
+        inline cv::Mat cannyImage(const cv::Mat & arg) {
             cv::Mat varAns;
             cv::Canny(arg, varAns, 86, 180);
             return std::move(varAns);
         }
 
-        bool saveImage(const cv::Mat & arg, const QString & argFileName) {
+        inline bool saveImage(const cv::Mat & arg, const QString & argFileName) {
             const auto varImageName = argFileName.toLocal8Bit();
             const cv::String varCVFileName{ varImageName.data(),
                         static_cast<std::size_t>(varImageName.size()) };
             return cv::imwrite(varCVFileName, arg);
         }
 
-        QImage toQImage(const cv::Mat & arg) {
+        inline QImage toQImage(const cv::Mat & arg) {
             if (arg.empty()) {
                 return{};
             }
@@ -90,7 +90,7 @@ namespace sstd {
                 varImageWrap.release() };
         }
 
-        std::vector< std::shared_ptr<LineItem> > houghLinesP(const cv::Mat & arg) {
+        inline std::vector< std::shared_ptr<LineItem> > houghLinesP(const cv::Mat & arg) {
             auto varLess = [](const auto & l, const auto & r) {
                 return l->thisLineLength > r->thisLineLength;
             };
@@ -124,9 +124,20 @@ namespace sstd {
             return std::move(varAns);
         }
 
-        std::array<double, 2> PCAMain(const std::vector< std::shared_ptr<LineItem> > & arg) {
-            cv::PCA varPCA;
-            return {};
+        inline std::array<double, 2> PCAMain(const std::vector< std::shared_ptr<LineItem> > & arg) {
+             
+            cv::Mat varMean;
+            cv::Mat varEigenVectors;
+            std::vector< cv::Point2d > varPoints;
+            varPoints.reserve(arg.size());
+
+            for (const auto & varI:arg) {
+                varPoints.emplace_back(varI->thisDx,varI->thisDy);
+            }
+
+            cv::PCACompute(varPoints, varMean, varEigenVectors);
+
+            return{ varEigenVectors.at<double>(0,0),varEigenVectors.at<double>(0,1) };
         }
 
     }/**/
@@ -156,10 +167,14 @@ namespace sstd {
             return std::fmod(varLines[0]->angle(), 45.);
         }
 
+        /*获得主方向*/
+        auto varMainAxis = ps::PCAMain(varLines);
+        return std::fmod( std::atan2(varMainAxis[1],varMainAxis[0])/3.141592654*180,45.);
 
-
-        return 0;
     }
 
 }/*namespace sstd*/
+
+// https://github.com/ngzHappy/oct2
+// https://github.com/ngzHappy/oct2/tree/master/opencv_data/opencv_pca
 
